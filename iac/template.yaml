@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: EventBridge example with a Java-based Lambda function
+Globals:
+  Function:
+    LoggingConfig:
+      LogFormat: JSON
+    MemorySize: !Ref pFnMemory
+    Timeout: !Ref pFnTimeout
+    Tracing: Active
+  Api:
+    TracingEnabled: true
+Parameters:
+  pFnMemory:
+    Type: Number
+    Default: 512
+  pFnTimeout:
+    Type: Number
+    Default: 20
+  pBusName:
+    Type: String
+Resources:
+  Bus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Ref pBusName
+  Rule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: !Ref Bus
+      EventPattern:
+        source: ["aws.ec2","custom"]
+      State: ENABLED
+      Targets:
+        - Id: lambda
+          Arn: !GetAtt Fn.Arn
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: cloudwatch-insights
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: '*'
+        - PolicyName: cloudwatch-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: 'arn:aws:logs:*:*:log-group:*:*'
+        - PolicyName: xray
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                  - xray:GetSamplingRules
+                  - xray:GetSamplingTargets
+                  - xray:GetSamplingStatisticSummaries
+                Resource: '*'
+  Fn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../target/EventBridgeDemo-1.0.jar
+      Handler: helloworld.App::handleRequest
+      Runtime: java21
+      Architectures:
+      - x86_64
+  FnLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${Fn}'
+      RetentionInDays: 7
+  FnPerm:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt Fn.Arn
+      Principal: events.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !GetAtt Rule.Arn
+Outputs:
+  outFn:
+    Value: !Ref Fn
+  outBusArn:
+    Value: !GetAtt Bus.Arn

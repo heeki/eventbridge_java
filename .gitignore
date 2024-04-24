@@ -1,0 +1,9 @@
+# directories
+.vscode
+target
+tmp
+
+# files
+etc/environment.sh
+dependency-reduced-pom.xml
+packaged.yaml
